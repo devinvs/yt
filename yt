@@ -14,7 +14,7 @@ def log(*msg):
     print("\x1b[32m[+]\x1b[0m", *msg)
 
 def create_db():
-    conn = sqlite3.connect("/home/devin/.local/share/yt.db")
+    conn = sqlite3.connect(os.path.expanduser("~/.local/share/yt.db"))
     conn.execute("CREATE TABLE IF NOT EXISTS channels (name text, id text, sync text);")
     conn.execute("CREATE TABLE IF NOT EXISTS videos (name text, channel text, added text, link text);")
     conn.execute("CREATE TABLE IF NOT EXISTS syncs (sync text);")
