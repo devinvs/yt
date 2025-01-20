@@ -127,12 +127,13 @@ def skip_video(db):
 def usage():
     print("usage: yt [command]\n")
     print("commands:")
-    print("  list     - list the available videos")
-    print("  watch    - watch the next video")
-    print("  skip     - skip the next video")
-    print("  channels - list the channels you are subscribed to")
-    print("  add      - add a new channel")
-    print("  rm       - rm a channel")
+    print("  list       - list the available videos")
+    print("  watch      - watch the next video")
+    print("  skip       - skip to the next video")
+    print("  channels   - list the channels you are subscribed to")
+    print("  add [name] - add a new channel")
+    print("  rm [name]  - rm a channel\n")
+    print("Note: a channel's name is it's tag, which is preceded by an '@'")
 
     exit(0)
     
