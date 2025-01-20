@@ -6,3 +6,4 @@ Dependencies:
 - python3
 - mpv
 - yt-dlp
+- requests
