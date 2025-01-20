@@ -7,12 +7,18 @@ from xml.dom.minidom import parseString
 import sqlite3
 import requests as r
 
-
+# regex to extract channel id from the channel page
 channel_id_r = re.compile(r'"browseId":"([^"]*)"')
 
-def log(*msg):
-    print("\x1b[32m[+]\x1b[0m", *msg)
+# print, but to stderr
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
+# a somewhat pretty log message
+def log(*msg):
+    eprint("\x1b[32m[+]\x1b[0m", *msg)
+
+# create or open the db, ensuring all the table schemas are up to date
 def create_db():
     conn = sqlite3.connect(os.path.expanduser("~/.local/share/yt.db"))
     conn.execute("CREATE TABLE IF NOT EXISTS channels (name text, id text, sync text);")
@@ -21,10 +27,13 @@ def create_db():
 
     return conn
 
+def get_channels(db):
+    return db.execute("SELECT name, id, sync FROM channels;").fetchall()
+
 # list all subscribed channels
 def list_channels(db):
     log("Channels:")
-    for row in db.execute("SELECT name FROM channels;"):
+    for row in get_channels(db):
         print("  -", row[0])
 
 # Add a channel to the database
@@ -95,7 +104,7 @@ def sync_channels(db):
     db.execute(f"INSERT INTO syncs VALUES ('{now}');")
     db.commit()
 
-    for channel in db.execute("SELECT name, id, sync FROM channels;"):
+    for channel in get_channels(db):
         sync_channel(db, channel[1], channel[0], datetime.fromisoformat(channel[2]))
 
 
@@ -125,15 +134,15 @@ def skip_video(db):
 
 
 def usage():
-    print("usage: yt [command]\n")
-    print("commands:")
-    print("  list       - list the available videos")
-    print("  watch      - watch the next video")
-    print("  skip       - skip to the next video")
-    print("  channels   - list the channels you are subscribed to")
-    print("  add [name] - add a new channel")
-    print("  rm [name]  - rm a channel\n")
-    print("Note: a channel's name is it's tag, which is preceded by an '@'")
+    eprint("usage: yt [command]\n")
+    eprint("commands:")
+    eprint("  list       - list the available videos")
+    eprint("  watch      - watch the next video")
+    eprint("  skip       - skip to the next video")
+    eprint("  channels   - list the channels you are subscribed to")
+    eprint("  add [name] - add a new channel")
+    eprint("  rm [name]  - rm a channel\n")
+    eprint("Note: a channel's name is it's tag, which is preceded by an '@'")
 
     exit(0)
     
