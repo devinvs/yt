@@ -1,0 +1,171 @@
+#!/usr/bin/python
+import os
+import sys
+import re
+from datetime import datetime, timezone, timedelta
+from xml.dom.minidom import parseString
+import sqlite3
+import requests as r
+
+
+channel_id_r = re.compile(r'"browseId":"([^"]*)"')
+
+def log(*msg):
+    print("\x1b[32m[+]\x1b[0m", *msg)
+
+def create_db():
+    conn = sqlite3.connect("/home/devin/.local/share/yt.db")
+    conn.execute("CREATE TABLE IF NOT EXISTS channels (name text, id text, sync text);")
+    conn.execute("CREATE TABLE IF NOT EXISTS videos (name text, channel text, added text, link text);")
+    conn.execute("CREATE TABLE IF NOT EXISTS syncs (sync text);")
+
+    return conn
+
+# list all subscribed channels
+def list_channels(db):
+    log("Channels:")
+    for row in db.execute("SELECT name FROM channels;"):
+        print("  -", row[0])
+
+# Add a channel to the database
+def add_channel(db, name):
+    log("querying channel id")
+
+    if name.startswith("@"):
+        name = name[1:]
+
+    res = r.get(f"https://youtube.com/@{name}")
+    ms = channel_id_r.search(res.text)
+    if ms is None:
+        log("channel not found")
+        exit(1)
+        
+    id = ms[1]
+    log(f"received id: {id}")
+
+    now = datetime.now(tz=timezone.utc)
+    db.execute(f"INSERT INTO channels (name, id, sync) VALUES (?, ?, ?);", (name, id, "1970-01-01 00:00:00.000000+00:00"))
+    db.commit()
+
+    sync_channel(db, id, name, now-timedelta(days=7))
+
+# remove a channel from the database
+def rm_channel(db, name):
+    log(f"removing channel {name}")
+
+    db.execute(f"DELETE FROM channels WHERE name=?", (name,))
+    db.commit()
+
+# sync all videos for a channel after time t
+def sync_channel(db, id, name, time):
+    res = r.get(f"https://www.youtube.com/feeds/videos.xml?channel_id={id}")
+    dom = parseString(res.text)
+    entries = dom.getElementsByTagName("entry")
+
+    last_time = time
+
+    for entry in entries:
+        title = entry.getElementsByTagName("title")[0].firstChild.data
+        published = entry.getElementsByTagName("published")[0].firstChild.data
+        link = entry.getElementsByTagName("link")[0].attributes["href"].value
+        d_published = datetime.fromisoformat(published)
+
+        if d_published > time:
+            if d_published > last_time:
+                last_time = d_published
+
+            log(f'adding "{title}"')
+            db.execute(f"INSERT INTO videos VALUES (?, ?, ?, ?);", (title, name, published, link))
+            db.execute(f"UPDATE channels SET sync=? WHERE id=?;", (last_time.isoformat(), id))
+            db.commit()
+
+# sync all the channels
+def sync_channels(db):
+    now = datetime.now(tz=timezone.utc)
+
+    syncs = db.execute("SELECT sync FROM syncs ORDER BY sync DESC;").fetchall()
+    if len(syncs) > 0:
+        last_sync = syncs[0][0]
+        last_sync = datetime.fromisoformat(last_sync)
+        delta = now-last_sync
+        if delta.days == 0 or delta.seconds < 600:
+            return
+
+    # it has been 10 minutes, start now
+    db.execute(f"INSERT INTO syncs VALUES ('{now}');")
+    db.commit()
+
+    for channel in db.execute("SELECT name, id, sync FROM channels;"):
+        sync_channel(db, channel[1], channel[0], datetime.fromisoformat(channel[2]))
+
+
+# list videos
+def list_videos(db):
+    for vid in db.execute("SELECT * FROM videos ORDER BY added ASC;"):
+        d = datetime.fromisoformat(vid[2])
+        print("\x1b[90m" + d.strftime("%-m/%-d") + "\x1b[0m", "\x1b[31m" + vid[1] + "\x1b[0m:", vid[0])
+
+
+def watch_video(db):
+    vids = db.execute("SELECT * FROM videos ORDER BY added ASC;").fetchall()
+    vid = vids[0]
+
+    db.execute(f"DELETE FROM videos WHERE channel=? AND added=?;", (vid[1], vid[2],))
+    db.commit()
+
+    os.system(f"mpv {vid[3]}")
+
+def skip_video(db):
+    vids = db.execute("SELECT * FROM videos ORDER BY added ASC;").fetchall()
+    vid = vids[0]
+
+    db.execute(f"DELETE FROM videos WHERE channel=? AND added=?;", (vid[1], vid[2],))
+    db.commit()
+    list_videos(db)
+
+
+def usage():
+    print("usage: yt [command]\n")
+    print("commands:")
+    print("  list     - list the available videos")
+    print("  watch    - watch the next video")
+    print("  skip     - skip the next video")
+    print("  channels - list the channels you are subscribed to")
+    print("  add      - add a new channel")
+    print("  rm       - rm a channel")
+
+    exit(0)
+    
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        usage()
+
+    if "-h" in sys.argv or "--help" in sys.argv:
+        usage()
+
+    cmd = sys.argv[1]
+    db = create_db()
+    sync_channels(db)
+
+    if cmd == "channels":
+        list_channels(db)
+    elif cmd == "add":
+        if len(sys.argv) < 3:
+            usage()
+        name = sys.argv[2]
+        add_channel(db, name)
+    elif cmd == "rm":
+        if len(sys.argv) < 3:
+            usage()
+        name = sys.argv[2]
+        rm_channel(db, name)
+    elif cmd == "list":
+        list_videos(db)
+    elif cmd == "watch":
+        watch_video(db)
+    elif cmd == "skip":
+        skip_video(db)
+    else:
+        usage()
+    
