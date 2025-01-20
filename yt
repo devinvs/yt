@@ -30,7 +30,7 @@ def create_db():
     return conn
 
 def get_channels(db):
-    return db.execute("SELECT name, id, sync FROM channels;").fetchall()
+    return db.execute("SELECT name, id, sync FROM channels ORDER BY name;").fetchall()
 
 # list all subscribed channels
 def list_channels(db):
@@ -99,7 +99,7 @@ def sync_channels(db):
         last_sync = syncs[0][0]
         last_sync = datetime.fromisoformat(last_sync)
         delta = now-last_sync
-        if delta.days == 0 or delta.seconds < 600:
+        if delta.days == 0 and delta.seconds < 600:
             return
 
     # it has been 10 minutes, start now
@@ -112,6 +112,7 @@ def sync_channels(db):
 
 # list videos
 def list_videos(db):
+    log("watch queue")
     for vid in db.execute("SELECT * FROM videos ORDER BY added ASC;"):
         d = datetime.fromisoformat(vid[2])
         print("\x1b[90m" + d.strftime("%-m/%-d") + "\x1b[0m", "\x1b[31m" + vid[1] + "\x1b[0m:", vid[0])
@@ -138,14 +139,14 @@ def skip_video(db):
 
 
 def usage():
-    eprint("usage: yt [command]\n")
+    eprint("usage: yt <command>\n")
     eprint("commands:")
     eprint("  list       - list the available videos")
     eprint("  watch      - watch the next video")
     eprint("  skip       - skip to the next video")
     eprint("  channels   - list the channels you are subscribed to")
-    eprint("  add [name] - add a new channel")
-    eprint("  rm [name]  - rm a channel\n")
+    eprint("  add <name> - add a new channel")
+    eprint("  rm <name>  - rm a channel\n")
     eprint("Note: a channel's name is it's tag, which is preceded by an '@'")
 
     exit(0)
